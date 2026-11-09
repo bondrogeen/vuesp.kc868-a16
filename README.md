@@ -4,6 +4,16 @@ KC868-A16: 16 входов и выходов через I2C, 4 ADC, Ethernet.
 
 Проект собран на базе шаблона [Vuesp](https://github.com/bondrogeen/vuesp): прошивка PlatformIO + web UI на Vue 3 и `vuesp-components`.
 
+## Документация
+
+Подробное описание платы, распиновка, схема, ScriptRunner и ограничения — в [DOCS.md](./DOCS.md).
+
+## Особенности
+
+- 16 входов и 16 реле через PCF8574 по I2C (`0x21`, `0x22`, `0x24`, `0x25`).
+- 4 ADC: GPIO36, 34, 35, 39.
+- Ethernet LAN8720 (MDC 23, MDIO 18), статический адрес по умолчанию.
+
 ## Плата и окружение
 
 - PlatformIO env: `esp8266 / esp32 / pico32 / esp32-c3-devkitm-1`
