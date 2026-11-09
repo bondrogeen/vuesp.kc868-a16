@@ -1,0 +1,27 @@
+{
+  "$schema": "https://vuesp.ru/schema/vuesp-project.json",
+  "name": "vuesp.kc868-a16",
+  "summary": "KinCony KC868-A16 industrial I/O controller with 16 inputs, 16 outputs, 4 ADC and Ethernet.",
+  "description": "## Vuesp KC868-A16\n\nFirmware for the KinCony KC868-A16 industrial controller. Sixteen opto-isolated inputs are read through I2C expanders at `0x21` and `0x22`, sixteen relay outputs are written to `0x24` and `0x25`, and four ADC channels are exposed in the dashboard.\n\nThe board supports Ethernet (LAN8720) and Wi-Fi. PlatformIO environments are provided for ESP8266, ESP32, ESP32-C3 and pico32 boards. The standard Vuesp web UI, ScriptRunner and OTA updates are included.",
+  "platforms": [
+    "ESP8266",
+    "ESP32",
+    "ESP32-C3"
+  ],
+  "tags": [
+    "kc868",
+    "kincony",
+    "relay",
+    "io",
+    "ethernet",
+    "esp32",
+    "esp8266"
+  ],
+  "createdWith": "vuesp-create@1.0.1",
+  "createdAt": "2026-11-09T01:08:53+03:00",
+  "template": {
+    "source": "local",
+    "ref": "local",
+    "commit": "8ebddcfc6f90135d6b2c1532c29eac0fd293f4ae"
+  }
+}
