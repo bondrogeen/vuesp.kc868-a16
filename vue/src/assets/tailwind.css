@@ -3,6 +3,16 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * When the device UI is embedded in the hub iframe, the hub owns the page
+ * background. Hide the device background so both layers do not double up.
+ */
+html.is-iframe,
+html.is-iframe body {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
 @layer base {
   h1,
   h2,

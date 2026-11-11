@@ -1,0 +1,8 @@
+{
+  "name": "vuesp.kc868-a16",
+  "private": true,
+  "scripts": {
+    "sync": "npx -y vuesp-create@latest sync . --apply",
+    "sync:check": "npx -y vuesp-create@latest sync ."
+  }
+}
