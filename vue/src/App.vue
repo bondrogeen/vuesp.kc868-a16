@@ -40,9 +40,9 @@
           </template>
           <template #default="{ repo, home }">
             <div class="flex gap-2 mt-4">
-              <v-button :to="repo" target="_blank" class="w-full text-white" color="blue">Github</v-button>
+              <v-button :href="repo" target="_blank" class="w-full text-white" color="blue">Github</v-button>
 
-              <v-button v-if="home" :to="home" target="_blank" class="w-full" color="blue" outline>{{ $t('homepage') }}</v-button>
+              <v-button v-if="home" :href="home" target="_blank" class="w-full" color="blue" outline>{{ $t('homepage') }}</v-button>
             </div>
           </template>
         </BlockStatus>
