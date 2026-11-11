@@ -5,12 +5,12 @@
   "description": "This is a Vue 3 web application for managing devices (e.g., IoT devices). The app interacts with devices via WebSockets, displays firmware and file system information, provides functions for uploading, deleting, and formatting files, and manages device services through a user-friendly interface.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bondrogeen/vuesp"
+    "url": "https://github.com/bondrogeen/vuesp.kc868-a16"
   },
   "homepage": "https://vuesp.ru",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/bondrogeen/vuesp/issues"
+    "url": "https://github.com/bondrogeen/vuesp.kc868-a16/issues"
   },
   "type": "module",
   "engines": {

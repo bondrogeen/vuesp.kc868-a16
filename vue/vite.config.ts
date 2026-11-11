@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
 import VueRouter from 'unplugin-vue-router/vite';
 import { compression } from 'vite-plugin-compression2';
@@ -19,10 +20,55 @@ type PackageMeta = typeof pkg & {
   bugs?: unknown;
 };
 
-// vuesp-create removes the template repository links from package.json.
+const normalizeRepository = (value: string | undefined): string | undefined => {
+  const remote = value?.trim();
+  if (!remote) return undefined;
+  if (remote.startsWith('git@')) {
+    const match = /^git@([^:]+):(.+)$/.exec(remote);
+    return match ? `https://${match[1]}/${match[2].replace(/\.git$/, '')}` : undefined;
+  }
+  if (remote.startsWith('ssh://')) {
+    try {
+      const url = new URL(remote);
+      return `https://${url.hostname}${url.pathname.replace(/\.git$/, '')}`;
+    } catch {
+      return undefined;
+    }
+  }
+  if (/^(https?|git):\/\//.test(remote)) {
+    return remote.replace(/^git:\/\//, 'https://').replace(/\.git$/, '');
+  }
+  return undefined;
+};
+
+const gitRepository = (() => {
+  try {
+    return normalizeRepository(
+      execFileSync('git', ['config', '--get', 'remote.origin.url'], {
+        cwd: fileURLToPath(new URL('.', import.meta.url)),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+    );
+  } catch {
+    return undefined;
+  }
+})();
+
 const pkgMeta = pkg as PackageMeta;
-const { name, version, author, description, repository, license, homepage, bugs } = pkgMeta;
-const info = { name, version, author, description, repository, license, homepage, bugs };
+const { name, version, author, description, repository, license, bugs } = pkgMeta;
+const packageRepository = repository as { url?: string } | undefined;
+const repositoryUrl = packageRepository?.url ?? gitRepository;
+const info = {
+  name,
+  version,
+  author,
+  description,
+  repository: repositoryUrl ? { type: 'git', url: repositoryUrl } : undefined,
+  license,
+  homepage: 'https://vuesp.ru',
+  bugs,
+};
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
