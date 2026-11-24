@@ -1,5 +1,7 @@
 #include "./discovery.h"
 
+#define UDP_PACKETS_PER_LOOP 4
+
 DeviceProtocol protocol;
 
 Discovery discovery = {
@@ -9,6 +11,10 @@ uint8_t total = 0;
 uint32_t lastTimeDiscovery = 0;
 uint32_t lastTimeProtocol = 0;
 WiFiUDP udp;
+
+// Shared receive buffer instead of a 1500-byte local in udpReceive(): the
+// ESP8266 has only ~1.5-2 KB of free stack.
+static uint8_t rxBuffer[PACKET_BUFFER_SIZE];
 
 bool udpSendPacket(const uint8_t* data, size_t length, uint32_t targetAddress) {
   IPAddress targetIp(targetAddress);
@@ -20,14 +26,20 @@ bool udpSendPacket(const uint8_t* data, size_t length, uint32_t targetAddress) {
 }
 
 void udpReceive() {
-  int packetSize = udp.parsePacket();
-  while (packetSize > 0) {
+  // Bound the work per loop: a discovery flood must not stretch the iteration.
+  for (uint8_t i = 0; i < UDP_PACKETS_PER_LOOP; i++) {
+    const int packetSize = udp.parsePacket();
+    if (packetSize <= 0) return;
+
     IPAddress senderIp = udp.remoteIP();
-    uint8_t buffer[TX_BUFFER_SIZE];
-    int len = udp.read(buffer, packetSize);
-    // Serial.printf("[RECV] %d bytes <- %s\n", len, senderIp.toString().c_str());
-    protocol.handleIncomingData((uint32_t)senderIp, buffer, len);
-    packetSize = udp.parsePacket();
+    const int len = udp.read(rxBuffer, sizeof(rxBuffer));
+
+    if (packetSize > (int)sizeof(rxBuffer)) {
+      while (udp.available() > 0) udp.read();
+      continue;
+    }
+
+    if (len > 0) protocol.handleIncomingData((uint32_t)senderIp, rxBuffer, (size_t)len);
   }
 }
 
@@ -69,7 +81,11 @@ void setupDiscovery() {
   });
 
   protocol.onTextReceived([](uint32_t senderId, const String& text) {
+#if VUESP_LOG_LEVEL >= 2
     Serial.printf("TEXT from 0x%08X: %s\n", senderId, text.c_str());
+#else
+    (void)senderId;
+#endif
     // Incoming text is a script: register it in the temporary slot and run it.
     scriptRunner.registerScript(254, text.c_str());
     scriptRunner.runScript(254);
@@ -84,7 +100,7 @@ void setupDiscovery() {
 }
 
 void commDiscovery() {
-  if (discovery.comm == COMMAND_GET) {
+  if (discovery.command == CMD_GET) {
     total = protocol.getPeerCount();
   }
 }

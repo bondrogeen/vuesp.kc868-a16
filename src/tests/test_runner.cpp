@@ -402,9 +402,6 @@ bool testArrayMulHandler(uint8_t paramCount, const Value* params, Value& result,
   return true;
 }
 
-// ============================================================
-// ТЕСТЫ IF/ELSE
-// ============================================================
 
 TEST(if_simple_true) {
   ScriptRunner runner;
@@ -813,9 +810,6 @@ TEST(end_without_if_error) {
   ASSERT_LOG_CONTAINS("end without block");
 }
 
-// ============================================================
-// НОВЫЕ ТЕСТЫ ДЛЯ СОКРАЩЕННОГО СИНТАКСИСА IF
-// ============================================================
 
 TEST(if_short_true) {
   ScriptRunner runner;
@@ -1008,9 +1002,6 @@ TEST(if_short_complex) {
   ASSERT_LOG_EXACT_ORDER(expected, 3);
 }
 
-// ============================================================
-// СТАРЫЕ ТЕСТЫ (без изменений)
-// ============================================================
 
 TEST(variable_assignment_uint) {
   ScriptRunner runner;

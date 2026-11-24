@@ -1,6 +1,6 @@
 #include "DeviceProtocol.h"
 
-DeviceProtocol::DeviceProtocol() : _myId(0), _initialized(false), _sendCallback(nullptr), _peerDiscoveredCallback(nullptr), _peerLostCallback(nullptr), _textReceivedCallback(nullptr), _binaryReceivedCallback(nullptr), _deviceStatus(DeviceStatus::OFFLINE), _lastAnnounceTime(0) {}
+DeviceProtocol::DeviceProtocol() : _myId(0), _initialized(false), _sendCallback(nullptr), _peerDiscoveredCallback(nullptr), _peerLostCallback(nullptr), _textReceivedCallback(nullptr), _binaryReceivedCallback(nullptr), _peerCount(0), _deviceStatus(DeviceStatus::OFFLINE), _lastAnnounceTime(0) {}
 
 void DeviceProtocol::setup(uint32_t myId) {
   _myId = myId;
@@ -19,13 +19,12 @@ OutgoingPacket DeviceProtocol::preparePacket(uint32_t targetId, PacketType type,
                                              const uint8_t* payload, size_t payloadLength) {
   OutgoingPacket packet;
   packet.type = type;
+  packet.data = nullptr;
+  packet.length = 0;
+  packet.targetAddress = BROADCAST_ADDRESS;
 
-  if (payloadLength > TX_BUFFER_SIZE - PACKET_HEADER_SIZE) {
-    packet.data = nullptr;
-    packet.length = 0;
-    packet.targetAddress = 0;
-    return packet;
-  }
+  // Reject payloads that do not fit instead of overflowing _txBuffer.
+  if (payloadLength > PACKET_BUFFER_SIZE - PACKET_HEADER_SIZE) return packet;
 
   _txBuffer[0] = static_cast<uint8_t>(type);
   _txBuffer[1] = (_myId >> 24) & 0xFF;
@@ -52,41 +51,57 @@ OutgoingPacket DeviceProtocol::preparePacket(uint32_t targetId, PacketType type,
 
 bool DeviceProtocol::sendAnnounce() {
   if (!_initialized || !_sendCallback) return false;
-  return _sendCallback(preparePacket(0, PacketType::BINARY, nullptr, 0));
+  const OutgoingPacket packet = preparePacket(0, PacketType::BINARY, nullptr, 0);
+  return packet.data && packet.length ? _sendCallback(packet) : false;
 }
 
 bool DeviceProtocol::sendText(uint32_t peerId, const String& text) {
   if (!_initialized || !_sendCallback) return false;
-  if (text.length() > TX_BUFFER_SIZE - PACKET_HEADER_SIZE) return false;
-  return _sendCallback(preparePacket(peerId, PacketType::TEXT, (const uint8_t*)text.c_str(), text.length()));
+  const OutgoingPacket packet =
+      preparePacket(peerId, PacketType::TEXT, (const uint8_t*)text.c_str(), text.length());
+  return packet.data && packet.length ? _sendCallback(packet) : false;
 }
 
 bool DeviceProtocol::sendBinary(uint32_t peerId, const uint8_t* data, size_t length) {
   if (!_initialized || !_sendCallback) return false;
-  if (length > TX_BUFFER_SIZE - PACKET_HEADER_SIZE) return false;
-  if (length > 0 && data == nullptr) return false;
-  return _sendCallback(preparePacket(peerId, PacketType::BINARY, data, length));
+  const OutgoingPacket packet = preparePacket(peerId, PacketType::BINARY, data, length);
+  return packet.data && packet.length ? _sendCallback(packet) : false;
 }
 
 void DeviceProtocol::handleIncomingData(uint32_t senderAddress, const uint8_t* data, size_t length) {
   if (!_initialized) return;
-  if (!data || length < PACKET_HEADER_SIZE || length > TX_BUFFER_SIZE) return;
+  if (length < PACKET_HEADER_SIZE) return;
 
   PacketType type = static_cast<PacketType>(data[0]);
-  if (type != PacketType::TEXT && type != PacketType::BINARY) return;
-
   uint32_t senderId = ((uint32_t)data[1] << 24) | ((uint32_t)data[2] << 16) |
                       ((uint32_t)data[3] << 8) | data[4];
 
   const uint8_t* payload = data + PACKET_HEADER_SIZE;
   size_t payloadLength = length - PACKET_HEADER_SIZE;
 
-  bool isNew = (_peers.find(senderId) == _peers.end());
-  if (isNew && _peers.size() >= MAX_PEERS) return;
-  _peers[senderId] = PeerInfo(senderId, senderAddress);
-  _peers[senderId].lastSeen = millis();
+  PeerInfo* peer = findPeer(senderId);
+  if (!peer) {
+    if (_peerCount >= MAX_PEERS) {
+      // Evict the peer that has been silent the longest.
+      uint8_t oldest = 0;
+      for (uint8_t i = 1; i < _peerCount; i++) {
+        if (_peers[i].lastSeen < _peers[oldest].lastSeen) oldest = i;
+      }
+      _peers[oldest].status = 0;
+      if (_peerLostCallback) _peerLostCallback(_peers[oldest]);
+      peer = &_peers[oldest];
+    } else {
+      peer = &_peers[_peerCount++];
+    }
 
-  if (isNew && _peerDiscoveredCallback) _peerDiscoveredCallback(_peers[senderId]);
+    *peer = PeerInfo(senderId, senderAddress);
+    peer->lastSeen = millis();
+    if (_peerDiscoveredCallback) _peerDiscoveredCallback(*peer);
+  } else {
+    peer->address = senderAddress;
+    peer->lastSeen = millis();
+    peer->status = 1;
+  }
 
   if (type == PacketType::BINARY && payloadLength == 0) return;
 
@@ -102,32 +117,36 @@ void DeviceProtocol::handleIncomingData(uint32_t senderAddress, const uint8_t* d
   }
 }
 
-const PeerInfo* DeviceProtocol::getPeer(uint32_t id) const {
-  auto it = _peers.find(id);
-  return (it != _peers.end()) ? &it->second : nullptr;
-}
-
-const PeerInfo* DeviceProtocol::getPeerByIndex(size_t index) const {
-  if (index >= _peers.size()) {
-    return nullptr;
-  }
-  size_t currentIndex = 0;
-  for (const auto& entry : _peers) {
-    if (currentIndex == index) {
-      return &entry.second;
-    }
-    currentIndex++;
+PeerInfo* DeviceProtocol::findPeer(uint32_t id) {
+  for (uint8_t i = 0; i < _peerCount; i++) {
+    if (_peers[i].id == id) return &_peers[i];
   }
   return nullptr;
 }
 
+const PeerInfo* DeviceProtocol::findPeer(uint32_t id) const {
+  for (uint8_t i = 0; i < _peerCount; i++) {
+    if (_peers[i].id == id) return &_peers[i];
+  }
+  return nullptr;
+}
+
+const PeerInfo* DeviceProtocol::getPeer(uint32_t id) const {
+  return findPeer(id);
+}
+
+const PeerInfo* DeviceProtocol::getPeerByIndex(size_t index) const {
+  if (index >= _peerCount) return nullptr;
+  return &_peers[index];
+}
+
 size_t DeviceProtocol::getPeerCount() const {
-  return _peers.size();
+  return _peerCount;
 }
 
 void DeviceProtocol::forEachPeer(std::function<void(const PeerInfo& peer)> callback) const {
-  for (const auto& entry : _peers) {
-    callback(entry.second);
+  for (uint8_t i = 0; i < _peerCount; i++) {
+    callback(_peers[i]);
   }
 }
 
@@ -136,15 +155,16 @@ void DeviceProtocol::update() {
 
   uint32_t now = millis();
 
-  for (auto it = _peers.begin(); it != _peers.end();) {
-    if (now - it->second.lastSeen > _peerTimeout) {
-      it->second.status = 0;
-      uint32_t id = it->first;
-      if (_peerLostCallback) _peerLostCallback(_peers[id]);
-      it = _peers.erase(it);
+  for (uint8_t i = 0; i < _peerCount;) {
+    if (now - _peers[i].lastSeen > _peerTimeout) {
+      _peers[i].status = 0;
+      if (_peerLostCallback) _peerLostCallback(_peers[i]);
+      // Replace the removed slot with the last one; re-check it in the next iteration
+      _peers[i] = _peers[_peerCount - 1];
+      _peerCount--;
     } else {
-      it->second.status = 1;
-      ++it;
+      _peers[i].status = 1;
+      i++;
     }
   }
 

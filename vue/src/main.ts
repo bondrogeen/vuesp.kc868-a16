@@ -9,9 +9,10 @@ import router from '@/router/index.ts';
 
 import vuesp from 'vuesp-components';
 import { i18nPlugin, i18nPluralizer } from 'vuesp-components/plugins';
-import type { I18nPluralRule } from 'vuesp-components/types';
+import type { TI18nPluralRule } from 'vuesp-components/types';
+import { ENUMS, STRUCTS } from '@/generated/protocol';
 
-const customRules: Record<string, I18nPluralRule> = {
+const customRules: Record<string, TI18nPluralRule> = {
   ru: (count, forms) => {
     if (count === 1) return forms[0];
     if (count >= 2 && count <= 4) return forms[1];
@@ -24,14 +25,17 @@ const customRules: Record<string, I18nPluralRule> = {
 
 const pluralize = i18nPluralizer(customRules);
 
-import 'vuesp-components/style.css';
-
 import '@/assets/tailwind.css';
 
 const pinia = createPinia();
 const app = createApp(App);
 
 (async () => {
+  if (import.meta.env.MODE === 'demo') {
+    const { installDemoRuntime } = await import('@/demo/runtime');
+    installDemoRuntime();
+  }
+
   try {
     const res = await useFetch(`/default.json`).get().json();
 
@@ -39,8 +43,8 @@ const app = createApp(App);
       throw new Error('Failed to load configuration from device');
     }
 
-    const { struct: structData, locales, ...resDefault } = res.data.value;
-    struct.init(structData);
+    const { locales, struct: _struct, ...resDefault } = res.data.value;
+    struct.init({ enums: ENUMS, structs: STRUCTS });
     pinia.use(({ store }) => {
       if (resDefault && store.$id === 'app') {
         store.$patch(resDefault);
@@ -61,7 +65,7 @@ const app = createApp(App);
         <div style="padding: 2rem; text-align: center;">
           <h1>Failed to Load Application</h1>
           <p>${error instanceof Error ? error.message : 'Unknown error occurred'}</p>
-          <p style="color: #666; margin-top: 1rem;">Please check that the device is accessible and try refreshing the page.</p>
+          <p style="color: var(--color-slate-main); margin-top: 1rem;">Please check that the device is accessible and try refreshing the page.</p>
           <button onclick="location.reload()" style="padding: 0.5rem 1rem; margin-top: 1rem; cursor: pointer;">
             Reload Page
           </button>

@@ -44,10 +44,15 @@ void eventRunner() {
 }
 
 void onScriptComplete(uint8_t slot, uint8_t id) {
-    Serial.print("Script ");
-    Serial.print(id);
-    Serial.print(" completed in slot ");
-    Serial.println(slot);
+#if VUESP_LOG_LEVEL >= 2
+  Serial.print("Script ");
+  Serial.print(id);
+  Serial.print(" completed in slot ");
+  Serial.println(slot);
+#else
+  (void)slot;
+  (void)id;
+#endif
 }
 
 void setupRunner() {
@@ -62,7 +67,9 @@ void loopRunner(uint32_t now) {
   scriptRunner.update();
   if (!isSendSlots) return;
   if (now - lastTimeRunner > 100) {
+#if VUESP_LOG_LEVEL >= 3
     Serial.println(indexSlot);
+#endif
     lastTimeRunner = now;
     printSlotsInfo();
     indexSlot++;

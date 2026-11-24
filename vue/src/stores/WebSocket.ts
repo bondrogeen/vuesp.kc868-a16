@@ -1,5 +1,6 @@
-import type { IWebSocket, TypeMessage } from '../types/types.ts';
-import { KEYS } from '@/utils/const';
+import type { IWebSocket, TMessage } from '../types/types.ts';
+import { KEY } from '@/generated/protocol';
+import type { TKey } from '@/generated/protocol';
 
 import { defineStore } from 'pinia';
 import { useWebSocketStore } from './WebSocketStore.ts';
@@ -21,13 +22,13 @@ export const useWebSocket = defineStore('webSocket', {
   actions: {
     init() {
       this.infoLoaded = false;
-      this.onSend(KEYS.INFO);
+      this.onSend(KEY.INFO);
       event.emit('init');
       this.isInit = true;
     },
     requestInfo() {
       if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-      const buffer = struct.set(KEYS.INFO);
+      const buffer = struct.set(KEY.INFO);
       if (buffer) this.socket.send(buffer);
     },
     onopen() {
@@ -40,18 +41,12 @@ export const useWebSocket = defineStore('webSocket', {
       this.pingDevice = Date.now();
       if (message.data instanceof ArrayBuffer) {
         const data = struct.get(message.data);
-        event.emit('messages', data as TypeMessage);
+        event.emit('messages', data as TMessage);
         if (data) {
           const { object, key } = data;
-          if (key !== KEYS.PING) log(object, key);
-          if (key === KEYS.INFO) this.infoLoaded = true;
-          const store = useWebSocketStore();
-          const isStoreMethod = (key: string): key is keyof typeof store => key in store && typeof store[key as keyof typeof store] === 'function';
-          if (isStoreMethod(`SET_${key}`)) {
-            const methodName = `SET_${key}` as keyof typeof store;
-            const method = store[methodName] as Function;
-            method.call(store, object);
-          } else store.SET_MAIN(data);
+          if (key !== KEY.PING) log(object, key);
+          if (key === KEY.INFO) this.infoLoaded = true;
+          useWebSocketStore().onMessage(data as TMessage);
         }
       }
     },
@@ -63,10 +58,10 @@ export const useWebSocket = defineStore('webSocket', {
       event.emit('connected', false);
       log(data);
     },
-    onSend<K extends TypeMessage['key'], O extends TypeMessage['object']>(key: K, object?: O) {
+    onSend(key: TKey | number, object?: object) {
       log(key, object);
       if (this.socket && this.socket.readyState === WebSocket.OPEN && this.isConnect) {
-        const buffer = struct.set(key, object as Record<string, unknown>);
+        const buffer = struct.set(key, object as Record<string, unknown> | undefined);
         if (buffer) this.socket.send(buffer);
       }
     },

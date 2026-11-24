@@ -11,7 +11,6 @@ if (!inputFile) process.exit(1);
 const pathInput = path.normalize(process.cwd() + '/' + inputFile);
 const pathOutput = outputFile ? process.cwd() + '/' + outputFile : pathInput;
 
-// var { base } = path.parse(pathOutputFile);
 
 const options = {
   removeComments: true,

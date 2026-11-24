@@ -11,12 +11,18 @@
 
 #include <cstring>
 
-#define ENABLE_LOGGING 1
-#define ENABLE_PORT_LOGGING 1
-#define ENABLE_DATA_LOGGING 1
-#define ENABLE_LOAD_LOGGING 1
-#define ENABLE_EVENT_LOGGING 1
-#define ENABLE_SCRIPT_LOGGING 1
+#include "../const/define.h"
+
+#ifndef VUESP_LOG_LEVEL
+#define VUESP_LOG_LEVEL 0
+#endif
+
+#define ENABLE_LOGGING (VUESP_LOG_LEVEL >= 1)
+#define ENABLE_SCRIPT_LOGGING (VUESP_LOG_LEVEL >= 2)
+#define ENABLE_LOAD_LOGGING (VUESP_LOG_LEVEL >= 2)
+#define ENABLE_EVENT_LOGGING (VUESP_LOG_LEVEL >= 2)
+#define ENABLE_PORT_LOGGING (VUESP_LOG_LEVEL >= 3)
+#define ENABLE_DATA_LOGGING (VUESP_LOG_LEVEL >= 3)
 
 #define MAX_SCRIPTS 15
 #define MAX_SCRIPT_LEN 256
@@ -34,7 +40,7 @@
 #define MAX_EVENT_HANDLERS 20
 #define MAX_EVENT_NAME_LEN 16
 
-#define MAX_EXTERNAL_FUNCTIONS 5
+#define MAX_EXTERNAL_FUNCTIONS 16
 #define MAX_FUNCTION_PARAMS 5
 
 #define MAX_CALL_PARAMS 4
@@ -46,6 +52,10 @@
 #define ARRAY_SEPARATOR ','
 
 #define SCRIPT_EXEC_INTERVAL_MS 10
+
+#ifndef SCRIPT_UPDATE_BUDGET_US
+#define SCRIPT_UPDATE_BUDGET_US 3000
+#endif
 #define MAX_EVENT_PARAMS 4
 #define MAX_IF_NESTING 8
 #define MAX_BLOCK_NESTING 8
@@ -192,7 +202,6 @@ class ScriptRunner {
   uint16_t getSlotLen(uint8_t slot) const;
   uint8_t getTotalSlots() const;
 
-  // Возвращённые для тестов
   bool isBusy() const;
   uint32_t getUintVar(uint8_t idx) const;
   int32_t getIntVar(uint8_t idx) const;

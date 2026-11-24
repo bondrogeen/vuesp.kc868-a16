@@ -19,6 +19,7 @@ typedef uint8_t byte;
 extern uint32_t stub_millis;
 
 inline uint32_t millis() { return stub_millis; }
+inline uint32_t micros() { return stub_millis * 1000; }
 inline void delay(uint32_t ms) { stub_millis += ms; }
 
 inline long random(long max) { return rand() % max; }

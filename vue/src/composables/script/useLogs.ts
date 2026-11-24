@@ -1,6 +1,6 @@
 import { nextTick, ref, useTemplateRef, watch, type Ref } from 'vue';
 import { timeUtcToString } from 'vuesp-components/helpers';
-import type { IMessageMessage } from 'vuesp-components/types';
+import type { IMessage } from '@/types';
 
 interface ILog {
   time: string;
@@ -8,7 +8,7 @@ interface ILog {
   text: string;
 }
 
-export const useLogs = (message: Ref<IMessageMessage, IMessageMessage>) => {
+export const useLogs = (message: Ref<IMessage, IMessage>) => {
   const logs = ref<ILog[]>([]);
   const isHover = ref(false);
   const container = useTemplateRef<HTMLDivElement>('container');

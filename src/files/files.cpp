@@ -1,22 +1,17 @@
 #include "./files.h"
 
-static_assert(sizeof(ConfigBlockHeader) == 12, "Unexpected ConfigBlockHeader layout");
-
-static uint32_t crc32(const uint8_t* data, size_t size) {
-  uint32_t crc = 0xFFFFFFFFUL;
-  for (size_t i = 0; i < size; i++) {
-    crc ^= data[i];
-    for (uint8_t bit = 0; bit < 8; bit++) {
-      crc = (crc >> 1) ^ (0xEDB88320UL & (uint32_t)(-(int32_t)(crc & 1)));
-    }
-  }
-  return ~crc;
-}
+#include "./init/init.h"
 
 void initFS() {
   if (!LittleFS.begin()) {
-    Serial.println(F("LittleFS mount failed; recovery mode"));
+    if (LittleFS.format()) {
+#if VUESP_LOG_LEVEL >= 1
+      Serial.println(F("Filesystem formatted!"));
+#endif
+      LittleFS.begin();
+    }
   }
+  if (!LittleFS.exists("/tmp")) LittleFS.mkdir("/tmp");
 }
 
 void getInfo(Info* infoFS) {
@@ -29,6 +24,7 @@ void getInfo(Info* infoFS) {
   infoFS->totalBytes = LittleFS.totalBytes();
   infoFS->usedBytes = LittleFS.usedBytes();
 #endif
+  updateEthernetInfo(infoFS);
   return;
 }
 
@@ -37,28 +33,19 @@ bool createDir(const char* path) {
 }
 
 uint8_t readFile(const char* path, uint8_t* buf, size_t size) {
-  if (!path || !buf || size == 0) return 0;
-
   File file = LittleFS.open(path, "r");
   if (!file || file.isDirectory()) {
     return 0;
-  }
-
-  // Do not touch buf unless the whole config is present.
-  if (file.size() != size) {
+  } else {
+    while (file.available()) {
+      file.read(buf, size);
+    }
     file.close();
-    return 0;
+    return 1;
   }
-
-  size_t read = file.read(buf, size);
-  file.close();
-
-  return read == size ? 1 : 0;
 }
 
-bool writeFile(const char* path, const uint8_t* buf, size_t size) {
-  if (!path || !buf || size == 0) return false;
-
+void writeFile(const char* path, const uint8_t* buf, size_t size) {
   if (!LittleFS.exists(path)) {
     if (strchr(path, '/')) {
       char* pathStr = strdup(path);
@@ -76,11 +63,10 @@ bool writeFile(const char* path, const uint8_t* buf, size_t size) {
   }
 
   File file = LittleFS.open(path, "w");
-  if (!file) return false;
-  size_t written = file.write(buf, size);
+  if (!file) return;
+  file.write(buf, size);
   delay(1);
   file.close();
-  return written == size;
 }
 
 void getLoadDef(const char* path, uint8_t* buf, size_t size) {
@@ -90,101 +76,83 @@ void getLoadDef(const char* path, uint8_t* buf, size_t size) {
   }
 }
 
-bool loadConfigBlock(const char* path, uint8_t* buf, size_t size) {
-  if (!path || !buf || size == 0 || size > MAX_CONFIG_BLOCK_SIZE) return false;
+#define SCRIPT_LINE_MAX 384
+#define SCRIPT_TEXT_MAX 256
 
-  File file = LittleFS.open(path, "r");
-  if (!file || file.isDirectory()) return false;
+static bool matchScriptLine(char* line, uint8_t id, char* buffer, uint16_t& len) {
+  char* start = line;
+  while (*start == ' ' || *start == '\t') start++;
 
-  // Legacy raw configs (before the block format) are migrated in place.
-  if (file.size() == size) {
-    if (file.read(buf, size) != size) {
-      file.close();
-      return false;
-    }
-    file.close();
-    saveConfigBlock(path, buf, size);
-    return true;
-  }
+  char* end = start + strlen(start);
+  while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
+  *end = '\0';
+  if (!*start) return false;
 
-  ConfigBlockHeader header;
-  if (file.size() != sizeof(header) + size) {
-    file.close();
-    return false;
-  }
-  if (file.read((uint8_t*)&header, sizeof(header)) != sizeof(header)) {
-    file.close();
-    return false;
-  }
-  if (header.magic != CONFIG_BLOCK_MAGIC || header.version != CONFIG_BLOCK_VERSION || header.size != size) {
-    file.close();
-    return false;
-  }
+  char* firstColon = strchr(start, ':');
+  if (!firstColon) return false;
+  *firstColon = '\0';
+  const int fileId = atoi(start);
 
-  uint8_t payload[MAX_CONFIG_BLOCK_SIZE];
-  if (file.read(payload, size) != size) {
-    file.close();
-    return false;
-  }
-  file.close();
+  char* rest = firstColon + 1;
+  char* secondColon = strchr(rest, ':');
+  if (!secondColon) return false;
 
-  if (crc32(payload, size) != header.crc) return false;
+  const char* script = secondColon + 1;
+  if (fileId != id) return false;
 
-  memcpy(buf, payload, size);
+  const size_t scriptLen = strlen(script);
+  if (scriptLen >= SCRIPT_TEXT_MAX) return false;
+
+  memcpy(buffer, script, scriptLen + 1);
+  len = (uint16_t)scriptLen;
   return true;
 }
 
-bool saveConfigBlock(const char* path, const uint8_t* buf, size_t size) {
-  if (!path || !buf || size == 0 || size > MAX_CONFIG_BLOCK_SIZE) return false;
-
-  uint8_t payload[sizeof(ConfigBlockHeader) + MAX_CONFIG_BLOCK_SIZE];
-  ConfigBlockHeader header = {
-      CONFIG_BLOCK_MAGIC,
-      CONFIG_BLOCK_VERSION,
-      (uint16_t)size,
-      crc32(buf, size),
-  };
-
-  memcpy(payload, &header, sizeof(header));
-  memcpy(payload + sizeof(header), buf, size);
-
-  return writeFile(path, payload, sizeof(header) + size);
-}
-
 bool loadScriptFromFS(uint8_t id, char* buffer, uint16_t& len) {
+#if VUESP_LOG_LEVEL >= 3
   Serial.println("loadScriptFromFS");
   Serial.println(id);
-  File file = LittleFS.open("/scripts.txt", "r");
+#endif
+  File file = LittleFS.open("/www/scripts.txt", "r");
   if (!file) {
     return false;
   }
+
+  static char line[SCRIPT_LINE_MAX];
+  uint16_t pos = 0;
+  bool overflow = false;
+  bool found = false;
+
   while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() == 0) continue;
-    int firstColon = line.indexOf(':');
-    if (firstColon == -1) continue;
-    int fileId = line.substring(0, firstColon).toInt();
-    String rest = line.substring(firstColon + 1);
-    int secondColon = rest.indexOf(':');
-    if (secondColon == -1) continue;
-    String script = rest.substring(secondColon + 1);
+    const int ch = file.read();
+    if (ch < 0) break;
 
-    if (fileId == id) {
-      const uint16_t maxLen = 255;
-      if (script.length() > maxLen) {
-        file.close();
-        return false;
+    if (ch == '\n') {
+      if (!overflow && pos > 0) {
+        line[pos] = '\0';
+        if (matchScriptLine(line, id, buffer, len)) {
+          found = true;
+          break;
+        }
       }
+      pos = 0;
+      overflow = false;
+      continue;
+    }
 
-      strncpy(buffer, script.c_str(), maxLen);
-      buffer[maxLen] = '\0';
-      len = script.length();
-      file.close();
-      return true;
+    if (ch == '\r') continue;
+    if (pos < sizeof(line) - 1) {
+      line[pos++] = (char)ch;
+    } else {
+      overflow = true;
     }
   }
 
+  if (!found && !overflow && pos > 0) {
+    line[pos] = '\0';
+    found = matchScriptLine(line, id, buffer, len);
+  }
+
   file.close();
-  return false;
+  return found;
 }

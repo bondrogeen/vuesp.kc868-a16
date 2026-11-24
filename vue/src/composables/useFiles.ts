@@ -9,7 +9,6 @@ export const useFiles = (fullPath: ComputedRef<string>, onUpdate?: () => void) =
   const { main, onDialog } = useConnection();
 
   const fileName = (name: string) => `${fullPath.value}${name}`;
-  const fileUrl = (name: string) => `${PATH_FS}?file=${encodeURIComponent(fileName(name))}`;
 
   const onUpload = async (files: FileList | null, fileName?: string) => {
     if (!files) return;
@@ -31,7 +30,9 @@ export const useFiles = (fullPath: ComputedRef<string>, onUpdate?: () => void) =
   };
 
   const onDelete = async (name: string) => {
-    const { data } = await useFetch(fileUrl(name)).delete().json();
+    const { data } = await useFetch(`${PATH_FS}?file=${fileName(name)}`)
+      .delete()
+      .json();
     if (data.value?.state) onUpdate?.();
     else onDialog({ value: true, message: 'Directory is not empty' });
   };
@@ -41,7 +42,7 @@ export const useFiles = (fullPath: ComputedRef<string>, onUpdate?: () => void) =
     if (data.value?.state) onUpdate?.();
   };
 
-  const createLink = (name: string) => createDownloadLink(fileUrl(name), name);
+  const createLink = (name: string) => createDownloadLink(`${PATH_FS}?file=${fileName(name)}`, name);
 
   const onClickUpload = () => {
     const el: any = document.querySelector('input[type="file"]');

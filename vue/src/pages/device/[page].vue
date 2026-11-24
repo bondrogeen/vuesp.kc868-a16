@@ -9,6 +9,7 @@ import { getPageTitle } from 'vuesp-components/helpers';
 
 import ServiceGPIO from '@/components/service/ServiceGPIO.vue';
 import ServiceStorage from '@/components/service/ServiceStorage.vue';
+import ServiceModbus from '@/components/service/ServiceModbus.vue';
 import ServiceSettings from '@/components/service/ServiceSettings.vue';
 
 const appStore = useAppStore();
@@ -35,7 +36,7 @@ onMounted(() => {
     <div class="mb-6 flex items-center justify-between">
       <h1>{{ $t(title || '') }}</h1>
 
-      <div data-slot="device"></div>
+      <div id="device-slot"></div>
     </div>
 
     <template v-if="show">
@@ -44,6 +45,8 @@ onMounted(() => {
       <ServiceStorage v-if="isPage('storage')" />
 
       <ServiceGPIO v-if="isPage('gpio')" />
+
+      <ServiceModbus v-if="isPage('modbus')" />
     </template>
   </div>
 </template>

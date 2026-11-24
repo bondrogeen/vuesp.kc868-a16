@@ -6,7 +6,7 @@
 
 #include "../const/index.h"
 
-#define SETTINGS_VERSION 1235
+#define SETTINGS_VERSION 1236
 
 void initEEprom();
 bool saveSettings(Settings& settings);

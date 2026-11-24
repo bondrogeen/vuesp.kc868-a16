@@ -64,7 +64,7 @@ then
             cp -v "$platform_dir/littlefs.bin" "./firmware/$platform/"
             
             echo "✅ $platform copied successfully"
-            ((copied_count++))
+            copied_count=$((copied_count + 1))
         else
             echo "⚠️  $platform files not found, skipping..."
         fi

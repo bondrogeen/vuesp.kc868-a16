@@ -357,7 +357,6 @@ bool ScriptRunner::getVariable(uint8_t type, uint8_t idx, ScriptState& s, Value&
   }
 }
 
-// ===== parseExpression с поддержкой произвольных имён переменных =====
 bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result) {
   while (*p == ' ') p++;
 
@@ -383,7 +382,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
     while (*p == ' ') p++;
   }
 
-  // Разбор левой части
   if (*p == '(') {
     p++;
     while (*p == ' ') p++;
@@ -401,7 +399,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
     p++;
     char type = *p;
 
-    // Проверяем, является ли переменная встроенной (с индексом)
     if ((type == 'u' || type == 'i' || type == 'f' || type == 's' || type == 'a' || type == 'p' ||
          type == 'e' || type == 'c') &&
         isDigit(*(p + 1))) {
@@ -416,7 +413,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
         return false;
       }
     } else {
-      // Произвольное имя переменной (например, $display)
       int32_t val = 0;
       const char* temp = nameStart;
       if (parseVarData(nameStart, val, &temp, KIND_INT)) {
@@ -459,7 +455,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
     return false;
   }
 
-  // Обработка унарных операторов
   if (isUnary) {
     if (unaryOp == '-') {
       if (left.type == VAL_INT) {
@@ -495,7 +490,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
     }
   }
 
-  // Цикл бинарных операторов
   while (true) {
     while (*p == ' ') p++;
 
@@ -535,7 +529,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
 
       Value right;
       right.type = VAL_NONE;
-      // Разбор правой части
       if (*p == '(') {
         p++;
         while (*p == ' ') p++;
@@ -566,7 +559,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
             return false;
           }
         } else {
-          // Произвольное имя
           int32_t val = 0;
           const char* temp = nameStart;
           if (parseVarData(nameStart, val, &temp, KIND_INT)) {
@@ -609,7 +601,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
         return false;
       }
 
-      // Выполнение операции
       if (isComparison || isShift) {
         int32_t l = (left.type == VAL_INT) ? left.intVal : (left.type == VAL_UINT) ? (int32_t)left.uintVal : (int32_t)left.floatVal;
         int32_t r = (right.type == VAL_INT) ? right.intVal : (right.type == VAL_UINT) ? (int32_t)right.uintVal : (int32_t)right.floatVal;
@@ -698,7 +689,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
       continue;
     }
 
-    // === ТЕРНАРНЫЙ ОПЕРАТОР ===
     if (*p == '?') {
       p++;
       while (*p == ' ') p++;
@@ -743,7 +733,6 @@ bool ScriptRunner::parseExpression(const char*& p, ScriptState& s, Value& result
   result = left;
   return true;
 }
-// ===== КОНЕЦ parseExpression =====
 
 bool ScriptRunner::parseCondition(const char* token, ScriptState& s) {
   const char* p = token;
@@ -1188,10 +1177,8 @@ bool ScriptRunner::processToken(const char* token, ScriptState& s, uint32_t now)
     if (strcmp(cmd, "if") == 0) return handleIf(params, s);
   }
 
-  // Сначала присваивания
   if (token[0] == '$') return handleAssignment(token, s);
 
-  // Потом команды с '('
   if (strchr(token, '(')) return processCommand(token, s, now);
 
   setError("unknown token", token, s.id, s.pos);
@@ -1548,8 +1535,16 @@ void ScriptRunner::processScript(uint8_t idx, uint32_t now) {
 }
 
 void ScriptRunner::update() {
-  uint32_t now = millis();
-  for (uint8_t i = 0; i < MAX_SCRIPTS; i++) processScript(i, now);
+  const uint32_t now = millis();
+  const uint32_t started = micros();
+
+  for (uint8_t i = 0; i < MAX_SCRIPTS; i++) {
+    processScript(i, now);
+
+    // Cap the time spent in user scripts per loop; the remaining slots run on
+    // the next iteration. A single token cannot be interrupted.
+    if ((i & 3) == 3 && (uint32_t)(micros() - started) >= SCRIPT_UPDATE_BUDGET_US) break;
+  }
 }
 
 bool ScriptRunner::registerFunction(const char* name, ExternalFunction func, void* userData) {
@@ -1955,13 +1950,11 @@ bool ScriptRunner::handleAssignment(const char* token, ScriptState& s) {
     return false;
   }
 
-  // Проверяем, является ли правая часть вызовом функции
   const char* right = eq + 1;
   while (*right == ' ') right++;
   if (isAlpha(*right)) {
     const char* paren = strchr(right, '(');
     if (paren) {
-      // Это вызов функции - передаём в processCommand
       return processCommand(token, s, 0);
     }
   }

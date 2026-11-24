@@ -2,6 +2,6 @@
 #define INDEX_H
 
 #include "define.h"
-#include "struct.h"
+#include "protocol.h"
 
 #endif

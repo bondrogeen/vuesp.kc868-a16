@@ -1,4 +1,6 @@
-0:boot:call(1);
-1:test1:$p13=255;wait(1s);$p13=0;wait(1s);
-2:test2:$p13=0;
-3:test3:$p13=255;
+0:boot:log('KC868-A16 ready');call(4);
+1:output1:log('OUT1 ON');output(1,1);wait(1s);output(1,0);log('OUT1 OFF');
+2:output_walk:$u0=1;while:$u0<=16;log('OUT',$u0);output($u0,1);wait(500ms);output($u0,0);$u0=$u0+1;end;log('walk done');
+3:input_scan:$u0=1;while:$u0<=16;log('IN',$u0,input($u0));$u0=$u0+1;end;log('scan done');
+4:input_event:on('port_c');log('IN',$e0+1,'value',$e1,'count',$e2);end;
+5:input_toggle:on('port_c');if:$e0==0;$u0=output(1);$u0=!$u0;output(1,$u0);log('OUT1',$u0);end;end;

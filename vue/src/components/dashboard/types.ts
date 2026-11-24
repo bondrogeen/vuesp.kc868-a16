@@ -1,7 +1,7 @@
-import type { IMessageBuffer, IDashboardItem } from '@/types';
+import type { IBuffer, IDashboardItem } from '@/types';
 
 export interface ICardChartProps extends Omit<IDashboardItem, 'value'> {
-  value?: IMessageBuffer;
+  value?: IBuffer;
 }
 
 export interface ICardChartEmit {

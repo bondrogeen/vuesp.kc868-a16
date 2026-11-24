@@ -1,12 +1,12 @@
 import type { IStateMain } from '@/types';
 import { computed, ref, type Ref } from 'vue';
-import type { IMessageMessage } from 'vuesp-components/types';
+import type { IMessage } from '@/types';
 
 export const useSlots = (main: Ref<IStateMain, IStateMain>) => {
-  const currentSlot = ref<IMessageMessage | null>(null);
+  const currentSlot = ref<IMessage | null>(null);
   const slotInfo = computed(() => {
     return Object.values(main.value.slots).reduce(
-      (acc, i: IMessageMessage) => {
+      (acc, i: IMessage) => {
         if (i.active || i.handler) {
           acc.used = acc.used + 1;
         }
@@ -17,13 +17,13 @@ export const useSlots = (main: Ref<IStateMain, IStateMain>) => {
     );
   });
 
-  const onSlot = (slot: IMessageMessage) => {
+  const onSlot = (slot: IMessage) => {
     currentSlot.value = slot;
   };
-  const getColorSlot = (slot: IMessageMessage) => {
+  const getColorSlot = (slot: IMessage) => {
     if (slot.active) return 'bg-violet-500';
     if (slot.handler) return 'bg-blue-500';
-    return 'bg-gray-200 dark:bg-gray-500 ';
+    return 'bg-gray-light-10 dark:bg-gray-dark-25 ';
   };
   return {
     slotInfo,

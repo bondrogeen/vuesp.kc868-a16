@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { IListItem, IMessagePort } from '@/types';
-import { KEYS } from '@/utils/const';
+import type { IListItem, IPort } from '@/types';
+import { KEY } from '@/utils/const';
 
-import { MODE_BOARD_1, MODE_BOARD_2, COMMAND, LIST } from '@/utils/gpio';
+import { CMD, PORT } from '@/generated/protocol';
 
 import { useDebounceFn } from '@vueuse/core';
 
@@ -10,17 +10,11 @@ import { useConnection } from '@/composables/useConnection';
 import { useFetch } from '@vueuse/core';
 import { PATH_FS, pathGPIO } from '@/utils/const';
 import { useLocale } from '@/composables/useLocale';
-import { computed } from 'vue';
-import { VCheckbox, VTooltip } from 'vuesp-components/components';
+import { VCard, VIcon, VCheckbox, VTooltip } from 'vuesp-components/components';
 
 const { $t } = useLocale();
 const { main, onSend, onDialog } = useConnection((send) => {
-  send(KEYS.PORT, { gpio: 0, command: COMMAND.GPIO_COMMAND_GET_ALL });
-});
-
-const MODE = computed(() => {
-  if (main.value.info.board === 2) return MODE_BOARD_2;
-  return MODE_BOARD_1;
+  send(KEY.PORT, { gpio: 0, command: CMD.GET_ALL });
 });
 
 const listMenu: IListItem<number>[] = [
@@ -28,64 +22,59 @@ const listMenu: IListItem<number>[] = [
   { name: $t('restore'), value: 2 },
 ];
 
-const getListMode = (port: IMessagePort): IListItem<number>[] => {
-  const list = [];
-  const data = port?.list || 0;
-
-  // { name: 'INPUT_PULLDOWN_16', value: 12 }, // 0x04
-  // { name: 'WAKEUP_PULLUP', value: 13 }, // 0x05
-  // { name: 'WAKEUP_PULLDOWN', value: 15 }, // 0x07
-  if (data & LIST.GPIO_BIT_INPUT) list.push({ name: 'INPUT', value: MODE.value.INPUT });
-  if (data & LIST.GPIO_BIT_INPUT_PULLUP) list.push({ name: 'INPUT_PULLUP', value: MODE.value.INPUT_PULLUP });
-  if (data & LIST.GPIO_BIT_OUTPUT) list.push({ name: 'OUTPUT', value: MODE.value.OUTPUT });
-  if (data & LIST.GPIO_BIT_OUTPUT_OPEN_DRAIN) list.push({ name: 'OUTPUT_OPEN_DRAIN', value: MODE.value.OUTPUT_OPEN_DRAIN });
-  if (data & LIST.GPIO_BIT_PWM) list.push({ name: 'PWM', value: MODE.value.PWM });
-  if (data & LIST.GPIO_BIT_ONEWIRE) list.push({ name: 'ONEWIRE', value: MODE.value.ONEWIRE });
-  if (data & LIST.GPIO_BIT_ADC) list.push({ name: 'ADC', value: MODE.value.ADC });
-  if (data & LIST.GPIO_BIT_DAC) list.push({ name: 'DAC', value: MODE.value.DAC });
-
-  return list;
-};
-
-const getNameList = (port: IMessagePort) => getListMode(port).find((i) => i.value === port.mode)?.name;
-const getNameListInterrupt = (port: IMessagePort) => listInterrupt.find((i) => i.value === port.interrupt)?.name;
-
-const listInterrupt: IListItem<number>[] = [
-  { name: 'OFF', value: 0 }, // 0x00
-  { name: 'RISING', value: 1 }, // 0x01
-  { name: 'FALLING', value: 2 }, // 0x02
-  { name: 'CHANGE', value: 3 }, // 0x03
+const modes: Array<{ name: string; value: number }> = [
+  { name: 'INPUT', value: PORT.INPUT },
+  { name: 'INPUT_PULLUP', value: PORT.INPUT_PULLUP },
+  { name: 'OUTPUT', value: PORT.OUTPUT },
+  { name: 'OUTPUT_OPEN_DRAIN', value: PORT.OUTPUT_OPEN_DRAIN },
+  { name: 'PWM', value: PORT.PWM },
+  { name: 'ONEWIRE', value: PORT.ONEWIRE },
+  { name: 'ADC', value: PORT.ADC },
+  { name: 'DAC', value: PORT.DAC },
 ];
 
-const isOutput = ({ mode = 0 }: IMessagePort) => [MODE.value.OUTPUT, MODE.value.OUTPUT_OPEN_DRAIN].includes(mode);
-const isInput = ({ mode = 0 }: IMessagePort) => [MODE.value.INPUT, MODE.value.INPUT_PULLUP].includes(mode);
-const isPWM = ({ mode = 0 }: IMessagePort) => [MODE.value.PWM].includes(mode);
-const isADC = ({ mode = 0 }: IMessagePort) => [MODE.value.ADC].includes(mode);
-const isDAC = ({ mode = 0 }: IMessagePort) => [MODE.value.DAC].includes(mode);
+const getListMode = (port: IPort): IListItem<number>[] =>
+  modes.filter((mode) => ((port?.list || 0) & mode.value) !== 0).map(({ name, value }) => ({ name, value }));
 
-const onSetPort = (port: IMessagePort, value: number) => onSend(KEYS.PORT, { ...port, command: COMMAND.GPIO_COMMAND_SET, value });
-const onInputValue = useDebounceFn((port: IMessagePort, value: string) => onSend(KEYS.PORT, { ...port, command: COMMAND.GPIO_COMMAND_SET, value: +value }), 500);
+const getNameList = (port: IPort) => getListMode(port).find((i) => i.value === port.mode)?.name ?? '';
+const getNameListInterrupt = (port: IPort) => listInterrupt.find((i) => i.value === port.interrupt)?.name ?? '';
 
-const onMode = ({ gpio }: IMessagePort, { value }: IListItem<number>) => {
+const listInterrupt: IListItem<number>[] = [
+  { name: 'OFF', value: 0 },
+  { name: 'RISING', value: 1 },
+  { name: 'FALLING', value: 2 },
+  { name: 'CHANGE', value: 3 },
+];
+
+const isOutput = ({ mode = 0 }: IPort) => mode === PORT.OUTPUT || mode === PORT.OUTPUT_OPEN_DRAIN;
+const isInput = ({ mode = 0 }: IPort) => mode === PORT.INPUT || mode === PORT.INPUT_PULLUP;
+const isPWM = ({ mode = 0 }: IPort) => mode === PORT.PWM;
+const isADC = ({ mode = 0 }: IPort) => mode === PORT.ADC;
+const isDAC = ({ mode = 0 }: IPort) => mode === PORT.DAC;
+
+const onSetPort = (port: IPort, value: number) => onSend(KEY.PORT, { ...port, command: CMD.SET, value });
+const onInputValue = useDebounceFn((port: IPort, value: string) => onSend(KEY.PORT, { ...port, command: CMD.SET, value: +value }), 500);
+
+const onMode = ({ gpio }: IPort, { value }: IListItem<number>) => {
   main.value.ports[gpio].mode = value;
-  onSend(KEYS.PORT, { ...main.value.ports[gpio], command: COMMAND.GPIO_COMMAND_CHANGE });
+  onSend(KEY.PORT, { ...main.value.ports[gpio], command: CMD.CHANGE });
 };
 
-const onInterrupt = ({ gpio }: IMessagePort, { value }: IListItem<number>) => {
+const onInterrupt = ({ gpio }: IPort, { value }: IListItem<number>) => {
   main.value.ports[gpio].interrupt = value;
-  onSend(KEYS.PORT, { ...main.value.ports[gpio], command: COMMAND.GPIO_COMMAND_CHANGE });
+  onSend(KEY.PORT, { ...main.value.ports[gpio], command: CMD.CHANGE });
 };
 
-const onIsButton = ({ gpio }: IMessagePort, value: boolean) => {
+const onIsButton = ({ gpio }: IPort, value: boolean) => {
   main.value.ports[gpio].isButton = value ? 1 : 0;
-  onSend(KEYS.PORT, { ...main.value.ports[gpio], command: COMMAND.GPIO_COMMAND_CHANGE });
+  onSend(KEY.PORT, { ...main.value.ports[gpio], command: CMD.CHANGE });
 };
 
-const onReboot = () => onSend(KEYS.REBOOT);
+const onReboot = () => onSend(KEY.REBOOT);
 const onSureReboot = () => onDialog({ value: true, message: $t('dialog.doRestart'), callback: onReboot });
 
 const onSave = async () => {
-  onSend(KEYS.PORT, { gpio: 0, command: COMMAND.GPIO_COMMAND_SAVE });
+  onSend(KEY.PORT, { gpio: 0, command: CMD.SAVE });
   onSureReboot();
 };
 const onRestore = async () => {
@@ -101,20 +90,18 @@ const onMenu = ({ value }: IListItem<number>) => {
 
 <template>
   <div>
-    <card-main :title="$t('ports')">
-      <div class="relative grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-        <div v-for="port in main.ports" :key="port.gpio" class="p-4 bg-gray-100/40 dark:bg-gray-700/10 rounded-md border border-gray-200 dark:border-gray-700/40">
+    <div class="relative grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+        <VCard v-for="port in main.ports" :key="port.gpio" hover variant="glass" padding="lg" class="relative has-[.z-30]:z-20">
           <div class="mb-2">
             <h5 class="text-sm">{{ `GPIO: ${port.gpio} ${port.disabled ? `(${$t('dis')})` : ''}` }}</h5>
           </div>
 
           <div class="flex flex-col gap-4">
             <div class="grid gap-4 flex-auto grid-cols-1">
-              <v-select :model-value="getNameList(port)" :label="$t('mode')" :disabled="Boolean(port.disabled)" hideMessage :items="getListMode(port)" @change="onMode(port, $event)" />
+              <v-select :model-value="getNameList(port)" :label="$t('mode')" :disabled="Boolean(port.disabled)" :items="getListMode(port)" @change="onMode(port, $event)" />
 
               <v-select
                 v-if="isInput(port)"
-                hideMessage
                 :model-value="getNameListInterrupt(port)"
                 :disabled="Boolean(port.disabled)"
                 :label="$t('interrupt')"
@@ -123,14 +110,14 @@ const onMenu = ({ value }: IListItem<number>) => {
               />
 
               <div v-if="isInput(port) && getNameListInterrupt(port) === 'CHANGE'" class="flex items-center justify-between">
-                <VCheckbox v-model="port.isButton" @update:model-value="onIsButton(port, $event)">{{ $t('isButton') }}</VCheckbox>
+                <VCheckbox :model-value="Boolean(port.isButton)" @update:model-value="onIsButton(port, $event)">{{ $t('isButton') }}</VCheckbox>
 
                 <VTooltip>
                   <template #activator>
-                    <icon-ri-information-line class="size-4 text-gray-500" />
+                    <VIcon name="info" class="size-4 text-gray-dark-25" />
                   </template>
                   <template #default="{ show }">
-                    <div v-if="show" class="absolute top-0 right-0 bg-white-main px-3 py-2 rounded shadow-nav z-5 w-70 bg-white dark:bg-gray-800">
+                    <div v-if="show" class="absolute top-0 right-0 bg-white-main px-3 py-2 rounded shadow-nav z-5 w-70 bg-white dark:bg-gray-dark-30">
                       <p>{{ $t('message.shortPress') }}</p>
                     </div>
                   </template>
@@ -153,15 +140,14 @@ const onMenu = ({ value }: IListItem<number>) => {
               ></v-text-field>
             </div>
           </div>
-        </div>
+        </VCard>
       </div>
-    </card-main>
 
-    <Teleport to="[data-slot='device']">
+    <Teleport to="#device-slot">
       <v-select :items="listMenu" @change="onMenu">
         <template #activator="{ on }">
-          <v-button color="" type="icon" @click="on.click">
-            <icon-ri-more-line class="rotate-90"></icon-ri-more-line>
+          <v-button type="icon" @click="on.click">
+            <VIcon name="more" class="size-5 rotate-90"></VIcon>
           </v-button>
         </template>
       </v-select>

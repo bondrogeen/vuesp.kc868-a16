@@ -3,10 +3,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/*
- * When the device UI is embedded in the hub iframe, the hub owns the page
- * background. Hide the device background so both layers do not double up.
- */
 html.is-iframe,
 html.is-iframe body {
   background-color: transparent !important;
@@ -49,7 +45,7 @@ html.is-iframe body {
 }
 
 .docs-content pre {
-  @apply border-gray-200 bg-gray-100 p-5 dark:border-gray-800 dark:bg-white/[0.03] overflow-x-auto font-mono text-sm my-4;
+  @apply border-gray-light-10 bg-gray-light-30 p-5 dark:border-gray-dark-30 dark:bg-white/[0.03] overflow-x-auto font-mono text-sm my-4;
 }
 
 .docs-content table {
@@ -61,7 +57,7 @@ html.is-iframe body {
 }
 
 .docs-content td {
-  @apply px-3 py-2 border-b border-gray-200;
+  @apply px-3 py-2 border-b border-gray-light-10;
 }
 
 .docs-content blockquote {
@@ -69,7 +65,7 @@ html.is-iframe body {
 }
 
 .docs-content hr {
-  @apply border-t-2 border-gray-200 my-8;
+  @apply border-t-2 border-gray-light-10 my-8;
 }
 
 .docs-content a {

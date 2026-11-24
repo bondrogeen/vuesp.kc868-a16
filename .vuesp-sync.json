@@ -1,9 +1,0 @@
-{
-  "upstream": "github:bondrogeen/vuesp",
-  "paths": [
-    "vue/src",
-    "vue/scripts",
-    "vue/package.json",
-    "vue/vite.config.ts"
-  ]
-}

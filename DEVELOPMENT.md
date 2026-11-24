@@ -24,7 +24,7 @@ vuesp/
 │   │   ├── stores/   # Pinia state management
 │   │   ├── composables/
 │   │   └── assets/
-│   └── public/       # Static assets (struct.json, default.json)
+│   └── public/       # Static assets (default.json with struct)
 ├── data/
 │   └── www/          # Built web files (LittleFS)
 ├── firmware/         # Compiled firmware binaries
@@ -97,6 +97,70 @@ npm run build-web
 ```bash
 npm run build
 ```
+
+### Screenshots
+
+Screenshots for the README live in `github/images/screen`. Regenerate them
+without a device:
+
+```bash
+npm run screen:install   # once: downloads the Playwright Chromium build
+npm run screen           # all screens, dark theme, English UI
+```
+
+The command starts a mock device (binary WebSocket protocol + `/fs` endpoints),
+starts Vite in `screen` mode and captures the main pages:
+
+```bash
+npm run screen -- dashboard gpio         # only selected screens
+npm run screen -- --theme=light          # light theme
+npm run screen -- --locale=ru            # Russian UI
+npm run screen -- --width=1440 --height=900 --scale=2
+npm run screen -- --out=/tmp/screens     # custom output directory
+```
+
+To capture the real device UI instead of the mock:
+
+```bash
+npm run screen -- --base-url=http://192.168.1.100
+```
+
+The mock data is generated from `public/default.json`, so run
+`npm run struct-and-json` first if the firmware struct changed.
+
+The same tool can capture screenshots for a device project. Run it from the
+device's `vue/` directory and point `VUESP_SCREEN_ROOT` at that directory:
+
+```bash
+cd ../vuesp-devices/vuesp.cam/vue
+VUESP_SCREEN_ROOT="$PWD" \
+  node ../../../vuesp/vue/scripts/screen/capture.mjs --out=../github/images/screen
+```
+
+The mock reads the firmware version from the project's `platformio.ini`, so the
+captured status panel matches the device version. For BMS projects it also
+fills realistic voltage, cell, temperature and capacity values.
+
+The mock can also be started standalone for UI work:
+
+```bash
+npm run screen:mock   # only the mock device
+npm run dev:mock      # mock device + Vite dev server, no hardware needed
+```
+
+### Public demo
+
+The site demo is a static build of this UI with a browser-side device mock:
+
+```bash
+npm run demo
+```
+
+The command regenerates `public/default.json` from `src/const/struct.h`, builds
+with `--mode demo`, and copies the result to
+`../vuesp.ru/public/demo-app`. It reads the dashboard, scripts and firmware
+version from the current repository, so rebuild the demo after changing the
+firmware struct or dashboard.
 
 ## Backend Development
 

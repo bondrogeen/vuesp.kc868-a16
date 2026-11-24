@@ -1,97 +1,64 @@
 <script setup lang="ts">
-import type { IA16Device } from '@/types';
+import { computed } from 'vue';
 
-import { computed, ref } from 'vue';
-
-import { KEYS } from '@/utils/const';
+import { VIcon, EnergyFlowBlock, deviceBlockStorage, energyFlowDefinition, useBlock, VCard } from 'vuesp-components/components';
 import { useConnection } from '@/composables/useConnection';
 import { useLocale } from '@/composables/useLocale';
-
-import { VButton, VTextField } from 'vuesp-components/components';
+import { KEY } from '@/utils/const';
+import { CMD } from '@/generated/protocol';
+import PageHeader from '@/components/ui/PageHeader.vue';
 
 const { $t } = useLocale();
 
-const { main, onSend } = useConnection((send) => {
-  send(KEYS.DEVICE);
+const { main } = useConnection((send) => {
+  send(KEY.INFO);
+  send(KEY.DEVICE);
+  send(KEY.PORT, { gpio: 0, command: CMD.GET_ALL });
 });
 
-const device = computed(() => main.value.device as IA16Device);
+const block = useBlock(energyFlowDefinition, main, { storage: deviceBlockStorage });
 
-const inputMask = computed(() => (device.value.portIn1 << 8) | device.value.portIn2);
-const outputMask = computed(() => (device.value.portOut2 << 8) | device.value.portOut1);
-
-const isInput = (index: number) => Boolean(inputMask.value & (1 << (index - 1)));
-const isOutput = (index: number) => Boolean(outputMask.value & (1 << (index - 1)));
-
-const toggleOutput = (index: number) => {
-  const bit = index - 1;
-  const mask = 1 << (bit % 8);
-  const next = { ...device.value };
-
-  if (bit < 8) {
-    next.portOut1 = next.portOut1 & mask ? next.portOut1 & ~mask : next.portOut1 | mask;
-  } else {
-    next.portOut2 = next.portOut2 & mask ? next.portOut2 & ~mask : next.portOut2 | mask;
-  }
-
-  onSend(KEYS.DEVICE, { ...next, command: 0 });
-};
-
-const message = ref('');
-const sendMessage = () => {
-  onSend(KEYS.DEVICE, { ...device.value, message: message.value, command: 0 });
-  message.value = '';
-};
-
-const adc = computed(() => [
-  { label: 'ADC 1', value: device.value.adc1 },
-  { label: 'ADC 2', value: device.value.adc2 },
-  { label: 'ADC 3', value: device.value.adc3 },
-  { label: 'ADC 4', value: device.value.adc4 },
+const resources = computed(() => [
+  { href: 'https://docs.vuesp.ru/', icon: 'book', title: $t('homePage.docs'), text: $t('homePage.docsText') },
+  { href: 'https://docs.vuesp.ru/vuesp-components-examples', icon: 'grid', title: $t('homePage.components'), text: $t('homePage.componentsText') },
+  { href: 'https://docs.vuesp.ru/web-ui', icon: 'code', title: $t('homePage.webUi'), text: $t('homePage.webUiText') },
+  { href: 'https://github.com/bondrogeen/vuesp-components', icon: 'github', title: 'vuesp-components', text: $t('homePage.componentsSource') },
 ]);
 </script>
 
 <template>
-  <div class="container mx-auto">
-    <section class="mb-6 flex items-center justify-between">
-      <h1>{{ $t('menu.home') }}</h1>
-      <span class="text-sm text-gray-500">KC868-A16</span>
-    </section>
+  <div class="space-y-6 pb-10">
+    <PageHeader :title="$t('home')" />
 
-    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-      <card-main title="Inputs" class="p-4 sm:p-6">
-        <div class="grid grid-cols-4 gap-3 sm:grid-cols-8">
-          <div v-for="index of 16" :key="index" class="glass-panel flex flex-col items-center gap-1 rounded-xl px-2 py-3">
-            <span class="size-2.5 rounded-full" :class="isInput(index) ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.9)]' : 'bg-gray-300 dark:bg-gray-700'"></span>
-            <span class="text-[10px] font-semibold uppercase text-gray-500">IN {{ index }}</span>
-          </div>
-        </div>
-      </card-main>
+    <EnergyFlowBlock
+      v-bind="block.data"
+      :config="block.config"
+      :context="block.context"
+      @update:config="block.update"
+    />
 
-      <card-main title="Outputs" class="p-4 sm:p-6">
-        <div class="grid grid-cols-4 gap-3 sm:grid-cols-8">
-          <button v-for="index of 16" :key="index" class="glass-panel flex flex-col items-center gap-1 rounded-xl px-2 py-3 transition-all hover:brightness-110" @click="toggleOutput(index)">
-            <span class="size-2.5 rounded-full" :class="isOutput(index) ? 'bg-blue-500 shadow-[0_0_12px_rgba(37,99,235,0.9)]' : 'bg-gray-300 dark:bg-gray-700'"></span>
-            <span class="text-[10px] font-semibold uppercase text-gray-500">OUT {{ index }}</span>
-          </button>
-        </div>
-      </card-main>
-
-      <card-main title="ADC" class="p-4 sm:p-6">
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div v-for="item in adc" :key="item.label" class="glass-panel rounded-xl px-3 py-4 text-center">
-            <div class="mb-1 text-[10px] uppercase tracking-[0.2em] text-gray-500">{{ item.label }}</div>
-            <div class="font-mono text-xl font-bold">{{ item.value }}</div>
-          </div>
-        </div>
-      </card-main>
-
-      <card-main title="Message" class="p-4 sm:p-6">
-        <div class="flex flex-col gap-3 sm:flex-row">
-          <VTextField v-model="message" class="flex-auto" placeholder="Message" @keyup.enter="sendMessage" />
-          <VButton color="blue" :disabled="!message" @click="sendMessage">Send</VButton>
-        </div>
-      </card-main>
-    </div>
+    <VCard :title="$t('homePage.docs')" hover>
+      <p class="text-sm leading-relaxed text-gray-dark-25 dark:text-gray-main">{{ $t('homePage.docsIntro') }}</p>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <a
+          v-for="resource of resources"
+          :key="resource.href"
+          :href="resource.href"
+          target="_blank"
+          rel="noreferrer"
+          class="flex items-center gap-3 rounded-md bg-white/5 p-3 transition-colors hover:bg-white/10"
+        >
+          <VIcon name="book-open" v-if="resource.icon === 'book'" class="size-4 shrink-0 text-cyan-main" />
+          <VIcon name="layout-grid" v-else-if="resource.icon === 'grid'" class="size-4 shrink-0 text-cyan-main" />
+          <VIcon name="code" v-else-if="resource.icon === 'code'" class="size-4 shrink-0 text-cyan-main" />
+          <VIcon name="github" v-else-if="resource.icon === 'github'" class="size-4 shrink-0 text-cyan-main" />
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-medium">{{ resource.title }}</span>
+            <span class="mt-0.5 block text-xs leading-snug text-gray-dark-25 dark:text-gray-main">{{ resource.text }}</span>
+          </span>
+          <VIcon name="external" class="size-3.5 shrink-0 text-gray-main" />
+        </a>
+      </div>
+    </VCard>
   </div>
 </template>

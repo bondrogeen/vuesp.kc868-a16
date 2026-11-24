@@ -3,12 +3,12 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, URL } from 'node:url';
+import { Buffer } from 'node:buffer';
+import { readFileSync } from 'node:fs';
 import VueRouter from 'unplugin-vue-router/vite';
 import { compression } from 'vite-plugin-compression2';
 import pkg from '../vue/package.json';
 
-import Icons from 'unplugin-icons/vite';
-import IconsResolver from 'unplugin-icons/resolver';
 import Components from 'unplugin-vue-components/vite';
 
 const path = fileURLToPath(new URL('./src', import.meta.url));
@@ -70,17 +70,32 @@ const info = {
   bugs,
 };
 
-// https://vite.dev/config/
+const parseFirmwareVersion = (text: string): [number, number, number] => {
+  const match = /firmware_version\s*=\s*'\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}'/.exec(text);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [4, 0, 0];
+};
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const demoData = mode === 'demo'
+    ? {
+        defaultJson: readFileSync('public/default.json', 'utf8'),
+        dashboardJson: readFileSync('json/dashboard.json', 'utf8'),
+        scriptsTxt: readFileSync('public/scripts.txt', 'utf8'),
+        firmwareVersion: parseFirmwareVersion(readFileSync('../platformio.ini', 'utf8')),
+      }
+    : null;
   const authLogin = env.VITE_AUTH_LOGIN;
   const authPassword = env.VITE_AUTH_PASSWORD;
-  const ip = env.VITE_IP || '127.0.0.1';
+  const ip = env.VITE_IP;
   const url = authLogin && authPassword ? `${authLogin}:${authPassword}@${ip}` : ip;
+  const authHeader = authLogin && authPassword ? `Basic ${Buffer.from(`${authLogin}:${authPassword}`).toString('base64')}` : undefined;
+  console.log(url);
 
   return {
+    base: mode === 'demo' ? '/demo-app/' : '/',
     build: {
-      outDir: env.VITE_OUTPUT_DIR || '../data/www/',
+      outDir: mode === 'demo' ? '../demo-dist' : env.VITE_OUTPUT_DIR ?? '../data/www/',
       emptyOutDir: true,
       cssCodeSplit: false,
       rollupOptions: {
@@ -99,14 +114,14 @@ export default defineConfig(({ mode }) => {
       compression({
         filename: '[path][base].gz',
         algorithm: 'gzip',
-        deleteOriginalAssets: true,
+        deleteOriginalAssets: mode !== 'demo',
         include: /\.(js|css|svg|ttf|woff|eot|json)$/i,
         threshold: 0,
       }),
-      Icons({ autoInstall: true }),
-      Components({ resolvers: [IconsResolver({ prefix: 'icon', enabledCollections: ['ri'] })] }),
+      Components(),
     ],
     resolve: {
+      dedupe: ['vue', 'vue-router', 'pinia'],
       extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue'],
       alias: {
         '@': path,
@@ -118,22 +133,32 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       proxy: {
         '/esp': {
-          target: `ws://${url}`,
+          target: `ws://${ip}`,
           ws: true,
+          changeOrigin: true,
+          headers: authHeader ? { Authorization: authHeader } : undefined,
         },
         '/fs': {
-          target: `http://${url}`,
+          target: `http://${ip}`,
+          changeOrigin: true,
+          headers: authHeader ? { Authorization: authHeader } : undefined,
         },
         '/cmd': {
-          target: `http://${url}`,
+          target: `http://${ip}`,
+          changeOrigin: true,
+          headers: authHeader ? { Authorization: authHeader } : undefined,
         },
         '/update': {
-          target: `http://${url}`,
+          target: `http://${ip}`,
+          changeOrigin: true,
+          headers: authHeader ? { Authorization: authHeader } : undefined,
         },
       },
     },
     define: {
       __APP__: info,
+      __DEMO_DATA__: JSON.stringify(demoData),
+      __DEMO__: mode === 'demo',
     },
   };
 });

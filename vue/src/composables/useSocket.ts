@@ -62,8 +62,6 @@ export const useSocket = () => {
     ping = setInterval(() => {
       webSocket.onPing();
 
-      // A reload can race with the device's snapshot: if INFO never arrives,
-      // retry it until the first response, otherwise pages stay without data.
       if (socket.value?.readyState === WebSocket.OPEN && !webSocket.infoLoaded && Date.now() - lastInfoRequest > 2000) {
         lastInfoRequest = Date.now();
         webSocket.requestInfo();

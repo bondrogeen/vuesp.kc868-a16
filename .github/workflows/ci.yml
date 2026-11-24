@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. V4.1) — leave empty to use pushed tag'
+        description: 'Release tag (e.g. 3.4.0) — leave empty to use pushed tag'
         required: false
         default: ''
 
@@ -34,7 +34,7 @@ jobs:
           cache-dependency-path: "./vue/package-lock.json"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type check
         run: npm run typecheck
@@ -53,18 +53,17 @@ jobs:
           retention-days: 1
 
   backend:
-    name: Backend - PlatformIO (${{ matrix.env }})
+    name: Backend - PlatformIO Check
     runs-on: ubuntu-latest
     needs: frontend
+    env:
+      PLATFORMIO_BUILD_FLAGS: -DVUESP_LOG_LEVEL=0
 
     strategy:
       fail-fast: false
       matrix:
-        env:
-          - esp8266
+        platform:
           - esp32
-          - pico32
-          - esp32-c3-devkitm-1
 
     steps:
       - name: Checkout code
@@ -90,6 +89,14 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
+      - name: Install esptool dependencies
+        run: |
+          pip install rich_click intelhex
+          ~/.platformio/penv/bin/pip install rich_click intelhex || true
+
+      - name: Clean esptool cache
+        run: rm -rf ~/.platformio/packages/tool-esptoolpy
+
       - name: Download web artifact
         uses: actions/download-artifact@v4
         with:
@@ -99,26 +106,26 @@ jobs:
       - name: List data folder
         run: ls -la data/www/ && ls -la data/www/assets/ || true
 
-      - name: Build firmware
-        run: pio run -e ${{ matrix.env }}
+      - name: Build firmware for ${{ matrix.platform }}
+        run: pio run -e ${{ matrix.platform }}
 
-      - name: Build filesystem
-        run: pio run -e ${{ matrix.env }} -t buildfs
+      - name: Build filesystem for ${{ matrix.platform }}
+        run: pio run -e ${{ matrix.platform }} -t buildfs
 
       - name: Rename firmware files
         run: |
-          cp build/${{ matrix.env }}/firmware.bin ${{ matrix.env }}_firmware.bin
-          if [ -f build/${{ matrix.env }}/littlefs.bin ]; then
-            cp build/${{ matrix.env }}/littlefs.bin ${{ matrix.env }}_littlefs.bin
+          cp build/${{ matrix.platform }}/firmware.bin ${{ matrix.platform }}_firmware.bin
+          if [ -f build/${{ matrix.platform }}/littlefs.bin ]; then
+            cp build/${{ matrix.platform }}/littlefs.bin ${{ matrix.platform }}_littlefs.bin
           fi
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.env }}
+          name: firmware-${{ matrix.platform }}
           path: |
-            ${{ matrix.env }}_firmware.bin
-            ${{ matrix.env }}_littlefs.bin
+            ${{ matrix.platform }}_firmware.bin
+            ${{ matrix.platform }}_littlefs.bin
           if-no-files-found: warn
           retention-days: 30
 
@@ -138,7 +145,7 @@ jobs:
 
       - name: Build tests (${{ matrix.compiler }})
         working-directory: src/tests
-        run: ${{ matrix.compiler }} -std=c++11 -I../src -o test_runner test_runner.cpp arduino_stub.cpp ../runner/ScriptRunner.cpp
+        run: ${{ matrix.compiler }} -std=c++11 -DVUESP_LOG_LEVEL=3 -I../src -o test_runner test_runner.cpp arduino_stub.cpp ../runner/ScriptRunner.cpp
 
       - name: Run tests (${{ matrix.compiler }})
         working-directory: src/tests
@@ -148,6 +155,8 @@ jobs:
     name: Release firmware
     runs-on: ubuntu-latest
     needs: [backend, scriptrunner]
+    permissions:
+      contents: write
     if: |
       (github.event_name == 'push' && github.ref_type == 'tag') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
@@ -162,45 +171,62 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$TAG" >> $GITHUB_OUTPUT   # больше не убираем префикс v
 
-      - name: Download firmware artifacts
+      - name: Download esp32 firmware
         uses: actions/download-artifact@v4
         with:
-          pattern: firmware-*
+          name: firmware-esp32
           path: release
-          merge-multiple: true
+
+      - name: Download esp32-c3 firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-esp32-c3-devkitm-1
+          path: release
+
+      - name: Download esp8266 firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-esp8266
+          path: release
+
+      - name: Download pico32 firmware
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-pico32
+          path: release
 
       - name: Create firmware.json
         run: |
-          VERSION="${{ steps.vars.outputs.tag }}"
+          VERSION="${{ steps.vars.outputs.version }}"
           TAG="${{ steps.vars.outputs.tag }}"
           REPO="https://github.com/${GITHUB_REPOSITORY}"
-
+          
           echo "{" > release.json
           echo "  \"version\": \"$VERSION\"," >> release.json
           echo "  \"tag\": \"$TAG\"," >> release.json
           echo "  \"files\": {" >> release.json
-
+          
           first=true
           for f in release/*.bin; do
-            [ -f "$f" ] || continue
             name=$(basename "$f" .bin)
             if [ "$first" = true ]; then
               first=false
             else
               echo "," >> release.json
             fi
-            printf "    \"%s\": \"%s/releases/download/%s/%s\"" "$name" "$REPO" "$TAG" "$(basename "$f")" >> release.json
+            printf "    \"$name\": \"$REPO/releases/download/$TAG/$(basename $f)\"" >> release.json
           done
-
+          
           echo "" >> release.json
           echo "  }" >> release.json
           echo "}" >> release.json
-
+          
           cat release.json
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           files: |
@@ -219,20 +245,21 @@ jobs:
       - name: Check if README exists
         run: |
           if [ -f README.md ]; then
-            echo "README.md found"
+            echo "✅ README.md found"
           else
-            echo "README.md not found"
+            echo "❌ README.md not found"
             exit 1
           fi
 
       - name: Check if package.json is valid JSON
-        run: cat vue/package.json | jq . >/dev/null
+        run: |
+          cat vue/package.json | jq . || exit 1
 
       - name: Check if platformio.ini exists
         run: |
           if [ -f platformio.ini ]; then
-            echo "platformio.ini found"
+            echo "✅ platformio.ini found"
           else
-            echo "platformio.ini not found"
+            echo "❌ platformio.ini not found"
             exit 1
           fi

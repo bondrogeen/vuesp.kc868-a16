@@ -74,7 +74,6 @@ const onUpdate = (e: Event) => {
 };
 
 const openDialog = async () => {
-  // https://www.chartjs.org/
   await loadScript('https://cdn.jsdelivr.net/npm/chart.js');
   createChart();
 };
@@ -95,7 +94,7 @@ const openDialog = async () => {
           <canvas :id="getID(props)" height="300" width="0"></canvas>
         </div>
       </div>
-      <v-button class="mt-4" @click="onUpdate">{{ $t('btnUpdate') }}</v-button>
+      <v-button class="mt-4" @click="onUpdate" variant="ghost">{{ $t('btnUpdate') }}</v-button>
     </template>
   </CardBase>
 </template>

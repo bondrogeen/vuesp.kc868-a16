@@ -52,15 +52,28 @@ export const useScripts = () => {
   const onLoad = async () => {
     const { data } = await useFetch(`/fs?file=${PATH}`).text();
     if (!data.value) return;
-    const lines = data.value.split('\n');
-    scripts.value = lines.map((script): IScript => {
-      const parts = script.split(':');
-      const [id, name] = parts;
-      return { id: +id, name, content: parts.slice(2).join(':') };
-    });
-    if (scripts.value?.[0]) {
-      selectedScript.value = scripts.value?.[0] || null;
-      content.value = formatScript(scripts.value?.[0]?.content);
+    const lines = data.value.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    scripts.value = lines
+      .map((script): IScript | null => {
+        const first = script.indexOf(':');
+        const second = script.indexOf(':', first + 1);
+        if (first < 1 || second < 0) return null;
+
+        const id = Number(script.slice(0, first));
+        const name = script.slice(first + 1, second).trim();
+        const content = script.slice(second + 1);
+        if (!Number.isInteger(id) || id < 0 || !name) return null;
+
+        return { id, name, content };
+      })
+      .filter((script): script is IScript => script !== null);
+
+    if (scripts.value[0]) {
+      selectedScript.value = scripts.value[0];
+      content.value = formatScript(scripts.value[0].content);
+    } else {
+      selectedScript.value = null;
+      content.value = '';
     }
   };
 
