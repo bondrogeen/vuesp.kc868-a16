@@ -85,7 +85,8 @@ static void handleSerialLine(char* command) {
   if (strcmp(command, "VUESP:PING") == 0) {
     Serial.println(F("@VUESP:PONG"));
   } else if (strcmp(command, "VUESP:INFO") == 0) {
-    Serial.printf("@VUESP:INFO:%s,%s\n", WiFi.localIP().toString().c_str(), WiFi.softAPIP().toString().c_str());
+    Serial.printf("@VUESP:INFO:%s,%u,%08X,%s,%s\n", DEF_DEVICE_NAME, (unsigned)infoFS.board, (unsigned)infoFS.id,
+          WiFi.localIP().toString().c_str(), WiFi.softAPIP().toString().c_str());
   } else if (strcmp(command, "VUESP:ETH") == 0) {
 #if defined(ESP32) && !defined(ARDUINO_ESP32C3_DEV)
     Serial.printf("@VUESP:ETH:%d,%u,%s\n", ETH.linkUp() ? 1 : 0, (unsigned)ETH.linkSpeed(), ETH.localIP().toString().c_str());
@@ -125,14 +126,14 @@ static void handleSerialLine(char* command) {
     Serial.println(F("@VUESP:ETH:DHCP:OK"));
     delay(250);
     reboot();
-  } else if (strcmp(command, "VUESP:IO") == 0) {
-    Serial.printf("@VUESP:IO:%04X,%04X,%u,%u,%u,%u\n", device.input, device.output, device.adc1, device.adc2, device.adc3, device.adc4);
   } else if (strncmp(command, "VUESP:OUT\t", 10) == 0) {
     char* first = strchr(command, '\t');
     char* second = first ? strchr(first + 1, '\t') : nullptr;
     if (!second) {
       Serial.println(F("@VUESP:OUT:ERROR"));
     } else {
+      *first = '\0';
+      *second = '\0';
       const int pin = atoi(first + 1);
       const int value = atoi(second + 1);
       if (pin >= 1 && pin <= 16) {
